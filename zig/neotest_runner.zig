@@ -345,8 +345,8 @@ pub fn main() !void {
 
         const short_output = try std.fmt.allocPrint(
             gpa.allocator(),
-            "Test passed in {}",
-            .{std.fmt.fmtDuration(test_run_duration_in_ns)},
+            "Test passed in {D}",
+            .{test_run_duration_in_ns},
         );
 
         std.log.info("{s}", .{short_output});
