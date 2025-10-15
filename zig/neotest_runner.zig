@@ -364,8 +364,7 @@ pub fn main() !void {
     }
 
     try platform.restoreStdErr();
-
-    const test_results_json = try std.json.stringifyAlloc(gpa.allocator(), test_results.items, .{});
+    const test_results_json: []u8 = try std.fmt.allocPrint(gpa.allocator(), "{f}", .{std.json.fmt(test_results.items, .{})});
     const results_file = try std.fs.createFileAbsolute(results_file_path, .{});
     defer results_file.close();
     try results_file.writeAll(test_results_json);
