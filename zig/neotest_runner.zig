@@ -149,7 +149,7 @@ pub inline fn fuzz(
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var test_results = std.ArrayList(TestResult).init(gpa.allocator());
+    var test_results = std.array_list.Managed(TestResult).init(gpa.allocator());
     var debug_info = try std.debug.getSelfDebugInfo();
 
     const args = try std.process.argsAlloc(gpa.allocator());
