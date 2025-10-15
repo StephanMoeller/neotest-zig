@@ -301,9 +301,9 @@ pub fn main() !void {
                         break :blk;
                     };
                     defer output_file.close();
-                    var buffered_output_reader = std.io.bufferedReader(output_file.reader());
-                    const output_reader = buffered_output_reader.reader();
-                    first_output_line = output_reader.readUntilDelimiterAlloc(gpa.allocator(), '\n', 300) catch
+                    var buffer: [300]u8 = undefined;
+                    var output_reader = output_file.reader(&buffer);
+                    first_output_line = output_reader.interface.takeDelimiterExclusive('\n') catch
                         "Could not read output file.";
                 }
 
