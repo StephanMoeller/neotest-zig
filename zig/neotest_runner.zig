@@ -28,11 +28,11 @@ pub fn runnerLogFn(
 
     lockStderr();
     defer unlockStdErr();
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-    stdout.print(prefix ++ format ++ "\n", args) catch return;
-    stdout.flush() catch return;
+    var stderr_buffer: [1024]u8 = undefined;
+    var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+    const stderr = &stderr_writer.interface;
+    stderr.print(prefix ++ format ++ "\n", args) catch return;
+    stderr.flush() catch return;
 }
 
 fn lockStderr() void {
