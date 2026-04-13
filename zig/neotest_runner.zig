@@ -26,10 +26,19 @@ pub fn runnerLogFn(
 
     const prefix = "[" ++ comptime level.asText() ++ "] ";
 
-    lockStderr();
-    defer unlockStdErr();
-    const stderr = std.io.getStdErr().writer();
-    nosuspend stderr.print(prefix ++ format ++ "\n", args) catch return;
+    if (@hasDecl(std.debug, "lockStderrWriter")) {
+        // zig >= 0.15: lockStderrWriter locks + returns *Writer in one call
+        var buf: [4096]u8 = undefined;
+        const stderr = std.debug.lockStderrWriter(&buf);
+        defer std.debug.unlockStderrWriter();
+        nosuspend stderr.print(prefix ++ format ++ "\n", args) catch return;
+    } else {
+        // zig <= 0.14
+        lockStderr();
+        defer unlockStdErr();
+        const stderr = std.io.getStdErr().writer();
+        nosuspend stderr.print(prefix ++ format ++ "\n", args) catch return;
+    }
 }
 
 fn lockStderr() void {
@@ -149,7 +158,13 @@ pub inline fn fuzz(
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var test_results = std.ArrayList(TestResult).init(gpa.allocator());
+    // zig >= 0.15: ArrayList = unmanaged; managed moved to array_list.Managed
+    // zig <= 0.14: ArrayList = managed (stores allocator)
+    const TestResultList = if (builtin.zig_version.minor >= 15)
+        std.array_list.Managed(TestResult)
+    else
+        std.ArrayList(TestResult);
+    var test_results = TestResultList.init(gpa.allocator());
     var debug_info = try std.debug.getSelfDebugInfo();
 
     const args = try std.process.argsAlloc(gpa.allocator());
@@ -298,10 +313,19 @@ pub fn main() !void {
                         break :blk;
                     };
                     defer output_file.close();
-                    var buffered_output_reader = std.io.bufferedReader(output_file.reader());
-                    const output_reader = buffered_output_reader.reader();
-                    first_output_line = output_reader.readUntilDelimiterAlloc(gpa.allocator(), '\n', 300) catch
-                        "Could not read output file.";
+                    if (builtin.zig_version.minor >= 15) {
+                        // zig >= 0.15: reader() takes explicit buf; use interface for generic methods
+                        var read_buf: [4096]u8 = undefined;
+                        var output_reader = output_file.reader(&read_buf);
+                        first_output_line = output_reader.interface.takeDelimiterExclusive('\n') catch
+                            "Could not read output file.";
+                    } else {
+                        // zig <= 0.14: bufferedReader wraps reader()
+                        var buffered_output_reader = std.io.bufferedReader(output_file.reader());
+                        const output_reader = buffered_output_reader.reader();
+                        first_output_line = output_reader.readUntilDelimiterAlloc(gpa.allocator(), '\n', 300) catch
+                            "Could not read output file.";
+                    }
                 }
 
                 const short = try std.mem.concat(gpa.allocator(), u8, &.{ @errorName(err), ": ", first_output_line });
@@ -340,11 +364,11 @@ pub fn main() !void {
             );
         }
 
-        const short_output = try std.fmt.allocPrint(
-            gpa.allocator(),
-            "Test passed in {}",
-            .{std.fmt.fmtDuration(test_run_duration_in_ns)},
-        );
+        // zig >= 0.15: fmtDuration removed; zig <= 0.14: fmtDuration exists
+        const short_output = if (builtin.zig_version.minor >= 15)
+            try std.fmt.allocPrint(gpa.allocator(), "Test passed in {d}ms", .{test_run_duration_in_ns / std.time.ns_per_ms})
+        else
+            try std.fmt.allocPrint(gpa.allocator(), "Test passed in {}", .{std.fmt.fmtDuration(test_run_duration_in_ns)});
 
         std.log.info("{s}", .{short_output});
 
@@ -362,8 +386,18 @@ pub fn main() !void {
 
     try platform.restoreStdErr();
 
-    const test_results_json = try std.json.stringifyAlloc(gpa.allocator(), test_results.items, .{});
     const results_file = try std.fs.createFileAbsolute(results_file_path, .{});
     defer results_file.close();
-    try results_file.writeAll(test_results_json);
+    if (builtin.zig_version.minor >= 15) {
+        // zig >= 0.15: stringifyAlloc gone; use Stringify writer directly
+        var write_buf: [65536]u8 = undefined;
+        var file_writer = results_file.writer(&write_buf);
+        var jw: std.json.Stringify = .{ .writer = &file_writer.interface };
+        try jw.write(test_results.items);
+        try file_writer.interface.flush();
+    } else {
+        // zig <= 0.14
+        const test_results_json = try std.json.stringifyAlloc(gpa.allocator(), test_results.items, .{});
+        try results_file.writeAll(test_results_json);
+    }
 }

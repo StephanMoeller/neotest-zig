@@ -398,7 +398,7 @@ function M.build_spec(args)
     local run_spec = nil
     local root_path = args.tree:root():data().path
     log.trace("Looking for `build.zig` file with glob pattern", root_path .. "**/build.zig")
-    local build_file_path_matches = require("nio").fn.glob(root_path .. "**/build.zig", false, true)
+    local build_file_path_matches = require("nio").fn.glob(root_path .. "/**/build.zig", false, true)
     log.trace("Build file path matches", build_file_path_matches)
     local build_file_path = ""
     if (#build_file_path_matches > 0) then
