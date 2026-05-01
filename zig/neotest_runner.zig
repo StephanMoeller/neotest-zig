@@ -315,10 +315,12 @@ pub fn main() !void {
                     defer output_file.close();
                     if (builtin.zig_version.minor >= 15) {
                         // zig >= 0.15: reader() takes explicit buf; use interface for generic methods
+                        // takeDelimiterExclusive returns a slice into read_buf (stack), so we must
+                        // heap-allocate a copy to avoid use-after-scope across loop iterations.
                         var read_buf: [4096]u8 = undefined;
                         var output_reader = output_file.reader(&read_buf);
-                        first_output_line = output_reader.interface.takeDelimiterExclusive('\n') catch
-                            "Could not read output file.";
+                        const line = output_reader.interface.takeDelimiterExclusive('\n') catch "Could not read output file.";
+                        first_output_line = gpa.allocator().dupe(u8, line) catch "Could not read output file.";
                     } else {
                         // zig <= 0.14: bufferedReader wraps reader()
                         var buffered_output_reader = std.io.bufferedReader(output_file.reader());
